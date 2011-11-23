@@ -1,4 +1,4 @@
-from random import random
+from random import random, sample
 from decimal import Decimal
 
 from django.db import models
@@ -22,7 +22,7 @@ def pick(bias_list):
     # With help from
     #   @link http://fr.w3support.net/index.php?db=so&id=479236
     for choice, bias in bias_list:
-        current += bias
+        current += Decimal("%.15g" % bias)
         if number <= current:
             return choice
 
@@ -43,7 +43,33 @@ class BiasedManager(models.Manager):
             raise self.model.DoesNotExist
 
         calculations = queryset.aggregate(weight_sum=models.Sum('weight'))
+#        banners = queryset.extra(select={'bias': 'weight/%i' % calculations['weight_sum']})
+        banners = queryset
 
-        banners = queryset.extra(select={'bias': 'weight/%i' % calculations['weight_sum']})
+        return pick([(b, 1. * b.weight / calculations['weight_sum']) for b in banners])
 
-        return pick([(b, b.bias) for b in banners])
+    def biased_sample(self, count, **kwargs):
+        if 'is_active' in kwargs:
+            kwargs.pop('is_active')
+
+        queryset = super(BiasedManager, self).get_query_set()\
+            .filter(is_active=True, **kwargs)
+
+        if not queryset.count():
+            raise self.model.DoesNotExist
+
+        calculations = queryset.aggregate(weight_sum=models.Sum('weight'))
+#        banners = queryset.extra(select={'bias': 'weight/%i' % calculations['weight_sum']})
+        banners = queryset
+
+        l = [(b, 1. * b.weight / calculations['weight_sum']) for b in banners]
+
+        if count > len(l):
+            count = len(l)
+
+        chosen = []
+        while len(chosen) < count:
+            chosen.append(pick(l))
+
+        return chosen
+
