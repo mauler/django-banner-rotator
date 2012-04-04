@@ -72,4 +72,3 @@ class BiasedManager(models.Manager):
             chosen.append(pick(l))
 
         return chosen
-
